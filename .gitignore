@@ -1,4 +1,3 @@
-.dir-locals.el
 *~
 dist/
 .direnv/
