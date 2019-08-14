@@ -12,7 +12,6 @@ in
 #'';
     name = "haskell-shell";
     buildInputs = project.env.nativeBuildInputs ++ [
-      pkgs.busybox
       pkgs.man
       pkgs.nix
       pkgs.ghc

@@ -1,8 +1,14 @@
-name: horca
+cabal-version: 2.4
+
+name:horca
 version: 0.1.0
-license: BSD3
-cabal-version: >= 1.18
+license: BSD-3-Clause
 build-type: Simple
+
+
+common text
+    build-depends: text
+    extensions: OverloadedStrings
 
 library
     default-language: Haskell2010
@@ -10,40 +16,47 @@ library
       Game.Horca,
       Game.Horca.Types
       Game.Horca.TickTimer
---      Game.Horca.UI
-      Game.Horca.UI.BPMForm
     hs-source-dirs: src
     build-depends:
-      pretty-show,
-      reactive-banana,
       base,
       text,
       vector,
       containers,
       stm,
       async,
-      vty,
-      brick,
-      criterion-measurement,
       microlens,
       microlens-th,
       microlens-platform,
       text-zipper
 
-executable horca
+executable horca-editor
     build-depends:
       horca,
-      reactive-banana,
       base,
       stm,
       async,
+      text,
+      text-zipper,
       vty,
-      brick,
-      criterion-measurement,
       microlens,
       microlens-th,
-      text,
-      text-zipper
-    main-is: app/Main.hs
+      brick,
+      vector
+    hs-source-dirs: editor
+    main-is: Main.hs
+    other-modules:
+      Game.Horca.UI.Brick.Editor
+    default-language: Haskell2010
+    ghc-options:      -threaded
+
+executable horca-interpreter
+    build-depends:
+      horca,
+      base,
+      monoid-subclasses,
+      stm,
+      reactive-banana
+    hs-source-dirs: interpreter
+    main-is: Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded

@@ -1,74 +1,36 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE BlockArguments #-}
 
-module Game.Horca.UI.BPMForm where
+module Game.Horca.UI.Brick.Editor where
 
-import Game.Horca.Types
+import           Game.Horca.Types
 
 import qualified Data.Text as T
 import qualified Data.Text.Zipper as Z
 import qualified Data.Text.Zipper.Generic as ZG
 
 import qualified Graphics.Vty as V
-import Graphics.Vty.Attributes
+import           Graphics.Vty.Attributes
 
-import Brick
+import           Brick
 import qualified Brick.BChan as BC
-import Brick.Widgets.Center
-import Brick.Widgets.Border
+import           Brick.Widgets.Border
+import           Brick.Widgets.Center
 import qualified Brick.Widgets.Edit as E
 
-import Debug.Trace
-
-import Brick.Forms
-  ( Form
-  , newForm
-  , formState
-  , formFocus
-  , setFieldValid
-  , renderForm
-  , handleFormEvent
-  , invalidFields
-  , allFieldsValid
-  , focusedFormInputAttr
-  , invalidFormInputAttr
-  , checkboxField
-  , radioField
-  , editShowableField
-  , editTextField
-  , editPasswordField
-  , (@@=)
-  )
-import Brick.Focus
-  ( focusGetCurrent
-  , focusRingCursor
-  )
-
-import Control.Monad (forever)
+import           Control.Monad (forever)
 
 import           Control.Concurrent
-import Control.Concurrent.Async (Async, async, waitEither)
-import Control.Concurrent.STM (atomically, 
-                               TChan,  readTChan, dupTChan, writeTChan, newTChan)
+import           Control.Concurrent.Async (Async, async, waitEither)
+import           Control.Concurrent.STM (atomically,TChan,  readTChan, dupTChan, writeTChan, newTChan)
 
 import           Data.Maybe (fromMaybe)
 
-import Lens.Micro ((+~), (-~), (^.), (&), (.~), (%~), over)
-import Lens.Micro.TH
-import Lens.Micro.Platform
+import           Lens.Micro ((+~), (-~), (^.), (&), (.~), (%~), over)
+import           Lens.Micro.TH
+
 import qualified Data.Vector as Vec
 
-import Text.Show.Pretty (ppShowList)
-
-import Debug.Trace
-
-
---instance Show (Vec.Vector Char) where
---  show v = ppShowList v
-
-
-data FormName = BPMForm | BPMField | OKButton | OpsCanvas |  OpsCanvasViewPort
-  deriving (Eq, Ord, Show)
 
 data HorcaEvent = TickEvent | TickHideIndicator | HorcaEvent
   deriving (Eq, Ord, Show, Read)
@@ -76,8 +38,12 @@ data HorcaEvent = TickEvent | TickHideIndicator | HorcaEvent
 type BoardArrayRowType = T.Text
 type BoardArrayType = Z.TextZipper BoardArrayRowType
 
-type SeqEditor = E.Editor BoardArrayRowType FormName
-type BPMForm = Form BPMInfo HorcaEvent FormName
+
+
+data UIComponentName = BPMField | OpsCanvas |  OpsCanvasViewPort
+  deriving (Eq, Ord, Show)
+
+type SeqEditor = E.Editor BoardArrayRowType UIComponentName
 
 data BPMInfo =
   BPMInfo {
@@ -88,7 +54,6 @@ data BPMInfo =
     _exprVar :: TChan (Z.TextZipper BoardArrayRowType)
     }
 makeLenses ''BPMInfo
-
 
 
 gridBgAttr :: AttrName
@@ -104,23 +69,19 @@ theMap = attrMap globalDefault
 globalDefault :: Attr
 globalDefault = white `on` black
 
-defaultForm :: BPMInfo -> BPMForm
-defaultForm =
-  let
-    bpmField = editShowableField bpm BPMField
-  in newForm [ bpmField ]
-
 renderBPM i = str $ show $ i ^. bpm
 
 renderTick i = str $ if i ^. tickBool then "*" else " "
 
-renderCursorPosition i =  str $ show $ Z.cursorPosition $ i ^. editor ^. E.editContentsL
+editorContentL = editor . E.editContentsL
+
+renderCursorPosition i =  str $ show $ Z.cursorPosition $ i ^. editorContentL
 
 renderDebugInfos i =
   let debugInfos = hBox [
          vBox [
-         (renderBPM i),
-         (renderTick i)],
+         renderBPM i,
+         renderTick i],
          padLeft (Pad 10) $ vBox [
          renderCursorPosition i]
          ]
@@ -130,7 +91,7 @@ renderCanvasEditor i =
    withAttr gridBgAttr $ vLimitPercent 80 $ hLimitPercent 80 $
      E.renderEditor (txt . T.unlines) True $ i ^. editor
 
-drawApp :: BPMInfo -> [Widget FormName]
+drawApp :: BPMInfo -> [Widget UIComponentName]
 drawApp f =  [center (vBox [
                    renderCanvasEditor f,
                    renderDebugInfos f
@@ -156,31 +117,30 @@ textArray (w, h) charAtPos =
 
 
 replaceChar :: Monoid t => Char -> Z.TextZipper t -> Z.TextZipper t
-replaceChar c = (Z.insertChar c).Z.deleteChar
+replaceChar c = Z.insertChar c . Z.deleteChar
 
 deleteChar  :: (Eq t,Monoid t) => Z.TextZipper t -> Z.TextZipper t
 deleteChar z =
   let
     (row, col) = Z.cursorPosition z
     c = ' ' --defaultCharAtPosForGridBgPattern (col, row) 100000000000
-  in (Z.moveLeft. Z.deleteChar . (Z.insertChar c)) z
+  in (Z.moveLeft. Z.deleteChar . Z.insertChar c) z
 
 deletePrevChar :: (Eq t,Monoid t) => Z.TextZipper t -> Z.TextZipper t
 deletePrevChar z  =
   let
     (row, col) = Z.cursorPosition z
     c = ' ' --defaultCharAtPosForGridBgPattern (col - 1, row) 100000000000
-  in (Z.moveLeft . (Z.insertChar c) . Z.deletePrevChar) z
+  in (Z.moveLeft . Z.insertChar c . Z.deletePrevChar) z
 
 
-switchTickBool :: BPMInfo -> EventM FormName (Next BPMInfo)
+switchTickBool :: BPMInfo -> EventM UIComponentName (Next BPMInfo)
 switchTickBool f = continue $ f & tickBool %~ not
 
 tickHideIndicator f = continue $ f & tickBool .~ False
 tickShowIndicator f = continue $ f & tickBool .~ True
 
-step f =
-    tickShowIndicator f
+step = tickShowIndicator
 
 bpmDelta = BPM 10
 handleBPMValueEvent setterOperator s  =
@@ -188,48 +148,47 @@ handleBPMValueEvent setterOperator s  =
     newState = s & over bpm (setterOperator bpmDelta)
     bpmChan' = newState ^. bpmChan
   in suspendAndResume $ do
-                  atomically $ do writeTChan bpmChan' $ newState ^. bpm
+                  atomically $ writeTChan bpmChan' $ newState ^. bpm
                   return newState
 
 
 myHandleEditorEvent :: (Eq t, Monoid t) => V.Event -> E.Editor t n -> EventM n (E.Editor t n)
 myHandleEditorEvent (V.EvKey (V.KChar c) []) s | c /= '\t' = return $ E.applyEdit (replaceChar c) s
---myHandleEditorEvent (V.EvKey V.KBS []) s = exprEditorEditEvent (deletePrevChar) s
-myHandleEditorEvent (V.EvKey V.KBS []) s = return $ E.applyEdit (deletePrevChar) s
-myHandleEditorEvent (V.EvKey V.KDel []) s = return $ E.applyEdit (deleteChar) s
+myHandleEditorEvent (V.EvKey V.KBS []) s = return $ E.applyEdit deletePrevChar s
+myHandleEditorEvent (V.EvKey V.KDel []) s = return $ E.applyEdit deleteChar s
 myHandleEditorEvent e  s =  E.handleEditorEvent e s
 
-handleBPMFormEvent :: BrickEvent FormName HorcaEvent -> BPMInfo -> EventM FormName (Next BPMInfo)
-handleBPMFormEvent (AppEvent TickEvent) s = step s
-handleBPMFormEvent (AppEvent TickHideIndicator) s = tickHideIndicator s
-handleBPMFormEvent (VtyEvent (V.EvResize {}))    s   = continue s
-handleBPMFormEvent (VtyEvent (V.EvKey V.KEsc [])) s  = halt s
+handleHorcaEditorEvent :: BrickEvent UIComponentName HorcaEvent -> BPMInfo -> EventM UIComponentName (Next BPMInfo)
+handleHorcaEditorEvent (AppEvent TickEvent) s = step s
+handleHorcaEditorEvent (AppEvent TickHideIndicator) s = tickHideIndicator s
+handleHorcaEditorEvent (VtyEvent V.EvResize {})    s   = continue s
+handleHorcaEditorEvent (VtyEvent (V.EvKey V.KEsc [])) s  = halt s
 
-handleBPMFormEvent (VtyEvent (V.EvKey (V.KChar '-') [])) s = handleBPMValueEvent (subtract) s
-handleBPMFormEvent (VtyEvent (V.EvKey (V.KChar '+') [])) s = handleBPMValueEvent (+) s
+handleHorcaEditorEvent (VtyEvent (V.EvKey (V.KChar '-') [])) s = handleBPMValueEvent subtract s
+handleHorcaEditorEvent (VtyEvent (V.EvKey (V.KChar '+') [])) s = handleBPMValueEvent (+) s
 
-handleBPMFormEvent (VtyEvent e) s =
+handleHorcaEditorEvent (VtyEvent e) s =
   do
     let exprVar' = s ^. exprVar
-    let prev = s ^. editor ^. E.editContentsL
+    let prev = s ^. editorContentL
     res <- handleEventLensed s editor myHandleEditorEvent e
-    let new = res ^. editor ^. E.editContentsL
+    let new = res ^. editorContentL
     if Z.getText prev == Z.getText new
     then continue res
     else suspendAndResume $ do
-                   atomically $ do writeTChan exprVar' $ new
+                   atomically $ writeTChan exprVar' new
                    return res
 
 
-formApp :: App BPMInfo HorcaEvent FormName
-formApp = let
+horcaEditorApp :: App BPMInfo HorcaEvent UIComponentName
+horcaEditorApp = let
     _attrMap = attrMap
   in
     App
     { appDraw = drawApp
     , appChooseCursor = showFirstCursor
-    , appHandleEvent = flip handleBPMFormEvent
-    , appStartEvent = return --formAppStart
+    , appHandleEvent = flip handleHorcaEditorEvent
+    , appStartEvent = return
     , appAttrMap  = const theMap
 
     }
@@ -238,7 +197,7 @@ formApp = let
 --editorTextWithBg = E.editorText
 
 
-uiLoop :: App BPMInfo HorcaEvent FormName -> BC.BChan HorcaEvent -> BPMInfo -> IO (BPMInfo)
+uiLoop :: App BPMInfo HorcaEvent UIComponentName -> BC.BChan HorcaEvent -> BPMInfo -> IO BPMInfo
 uiLoop app eventQueue bpmInfo =
   do
     initialVty <- buildVty
@@ -278,7 +237,7 @@ runBrickUI bpmVar ticks =
     (eventQueue, tickWatcherIO) <- tickWatcher readableTicks
 
     tickWatcherAsync <- async tickWatcherIO
-    uiLoopAsync <- async $ uiLoop formApp eventQueue bpmInfo
+    uiLoopAsync <- async $ uiLoop horcaEditorApp eventQueue bpmInfo
     waitEither tickWatcherAsync uiLoopAsync
 
     return (exprVar', tickWatcherAsync, uiLoopAsync)

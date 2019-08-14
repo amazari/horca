@@ -1,7 +1,6 @@
-{ mkDerivation, async, base, brick, containers
-, criterion-measurement, microlens, microlens-platform
-, microlens-th, pretty-show, reactive-banana, stdenv, stm, text
-, text-zipper, vector, vty
+{ mkDerivation, async, base, brick, containers, microlens
+, microlens-platform, microlens-th, monoid-subclasses
+, reactive-banana, stdenv, stm, text, text-zipper, vector, vty
 }:
 mkDerivation {
   pname = "horca";
@@ -10,13 +9,12 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    async base brick containers criterion-measurement microlens
-    microlens-platform microlens-th pretty-show reactive-banana stm
-    text text-zipper vector vty
+    async base containers microlens microlens-platform microlens-th stm
+    text text-zipper vector
   ];
   executableHaskellDepends = [
-    async base brick criterion-measurement microlens microlens-th
-    reactive-banana stm text text-zipper vty
+    async base brick microlens microlens-th monoid-subclasses
+    reactive-banana stm text text-zipper vector vty
   ];
   license = stdenv.lib.licenses.bsd3;
 }

@@ -11,4 +11,4 @@ import Data.IORef
 newtype BPM = BPM Integer
   deriving (Eq, Ord, Show, Read, Num)
 
-data Tick = Tick
+data Tick = Tick deriving (Show)
